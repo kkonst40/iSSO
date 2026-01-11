@@ -33,7 +33,7 @@ func (r *UserRepo) GetAll(ctx context.Context) ([]model.User, error) {
 	}
 	defer rows.Close()
 
-	var users []model.User
+	users := []model.User{}
 	for rows.Next() {
 		var user model.User
 		if err := rows.Scan(
@@ -182,24 +182,32 @@ func (r *UserRepo) Delete(ctx context.Context, ID uuid.UUID) error {
 	return nil
 }
 
-func (r *UserRepo) Exist(ctx context.Context, ID uuid.UUID) (bool, error) {
+func (r *UserRepo) Exist(ctx context.Context, IDs []uuid.UUID) ([]uuid.UUID, error) {
 	const query = `
-		SELECT EXISTS(
-			SELECT 1
-			FROM users
-			WHERE id = $1
-		)
+		SELECT id
+		FROM users
+		WHERE id = ANY($1)
 	`
 
-	var exists bool
-
-	err := r.db.QueryRowContext(ctx, query, ID).Scan(
-		&exists,
-	)
-
+	rows, err := r.db.QueryContext(ctx, query, IDs)
 	if err != nil {
-		return false, fmt.Errorf("internal db error")
+		return nil, fmt.Errorf("internal db error")
+	}
+	defer rows.Close()
+
+	existIDs := []uuid.UUID{}
+	for rows.Next() {
+		var ID uuid.UUID
+		if err := rows.Scan(&ID); err != nil {
+			return nil, fmt.Errorf("internal db error")
+		}
+
+		existIDs = append(existIDs, ID)
 	}
 
-	return exists, nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("internal db error")
+	}
+
+	return existIDs, nil
 }

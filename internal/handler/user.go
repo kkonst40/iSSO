@@ -53,27 +53,27 @@ func (h *UserHandler) All(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) Exist(w http.ResponseWriter, r *http.Request) {
-	requesterID := r.Context().Value(middleware.RequesterIDKey).(uuid.UUID)
-	idStr := r.PathValue("id")
-	ID, err := uuid.Parse(idStr)
+	var inputIDs []uuid.UUID
+	err := json.NewDecoder(r.Body).Decode(&inputIDs)
 	if err != nil {
-		http.Error(w, "Invalid request url (id)", http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	exist, err := h.userService.Exist(r.Context(), ID, requesterID)
+	existingIDs, err := h.userService.Exist(r.Context(), inputIDs)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	if !exist {
-		w.WriteHeader(http.StatusNotFound)
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(existingIDs); err != nil {
+		http.Error(w, "Encoding response body error", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-
 }
 
 func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {

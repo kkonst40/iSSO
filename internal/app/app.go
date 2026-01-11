@@ -54,7 +54,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	mux.HandleFunc("GET /all", userHandler.All)
 	mux.HandleFunc("GET /me", middleware.Auth(userHandler.Me, jwtProvider))
-	mux.HandleFunc("GET /exists/{id}", middleware.Auth(userHandler.Exist, jwtProvider))
+	mux.HandleFunc("POST /exist", userHandler.Exist)
 	mux.HandleFunc("POST /login", userHandler.Login)
 	mux.HandleFunc("POST /logout", middleware.Auth(userHandler.Logout, jwtProvider))
 	mux.HandleFunc("POST /register", userHandler.Create)
