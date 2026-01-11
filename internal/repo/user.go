@@ -3,9 +3,11 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kkonst40/isso/internal/model"
 )
 
@@ -79,7 +81,7 @@ func (r *UserRepo) GetByID(ctx context.Context, ID uuid.UUID) (*model.User, erro
 
 func (r *UserRepo) GetByLogin(ctx context.Context, login string) (*model.User, error) {
 	const query = `
-		SELECT *
+		SELECT id, login, password_hash, token_id
 		FROM users
 		WHERE login = $1
 	`
@@ -89,13 +91,14 @@ func (r *UserRepo) GetByLogin(ctx context.Context, login string) (*model.User, e
 		&user.ID,
 		&user.Login,
 		&user.PasswordHash,
+		&user.TokenID,
 	)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user (%v) not found", login)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("internal db error")
+		return nil, fmt.Errorf("internal db error: %w", err)
 	}
 
 	return &user, nil
@@ -117,7 +120,16 @@ func (r *UserRepo) Create(ctx context.Context, user *model.User) error {
 	)
 
 	if err != nil {
-		return fmt.Errorf("internal db error")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			// unique violation
+			// error 23505 -> Возвращать 409 Conflict
+			if pgErr.Code == "23505" {
+				return fmt.Errorf("user with login (%s) already exists", user.Login)
+			}
+		}
+
+		return fmt.Errorf("internal db error: %w", err)
 	}
 
 	return nil
@@ -135,7 +147,14 @@ func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 
 	res, err := r.db.ExecContext(ctx, query, user.Login, user.Login, user.TokenID, user.ID)
 	if err != nil {
-		return fmt.Errorf("internal db error")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			// unique violation
+			if pgErr.Code == "23505" {
+				return fmt.Errorf("cannot update: login (%s) is already taken", user.Login)
+			}
+		}
+		return fmt.Errorf("internal db error: %w", err)
 	}
 
 	rowsAffected, err := res.RowsAffected()

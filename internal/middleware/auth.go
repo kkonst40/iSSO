@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/kkonst40/isso/internal/utils"
@@ -13,9 +14,11 @@ const RequesterIDKey contextKey = "requesterID"
 
 func Auth(next http.HandlerFunc, jwtProvider *utils.JWTProvider) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("pechenye")
+		log.Println("Auth cheking...")
+		cookie, err := r.Cookie(jwtProvider.Cfg.JWT.CookieName)
 		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			log.Println("cant get cookie")
+			http.Error(w, "Invalid cookie", http.StatusUnauthorized)
 			return
 		}
 
@@ -24,6 +27,8 @@ func Auth(next http.HandlerFunc, jwtProvider *utils.JWTProvider) http.HandlerFun
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
+		log.Println(tokenString)
 
 		claims, err := jwtProvider.ValidateToken(tokenString)
 		if err != nil {

@@ -33,23 +33,33 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 
-	jwtProvider := utils.NewJWTProvider(&cfg.JWT)
+	jwtProvider := utils.NewJWTProvider(cfg)
 	pwdHasher := utils.NewPasswordHandler()
 
 	userRepo := repo.New(db)
 	userService := service.New(jwtProvider, pwdHasher, userRepo, uuid.UUID{})
-	userHandler := handler.New(userService)
+	userHandler := handler.New(userService, cfg)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /all", userHandler.All)
-	mux.HandleFunc("GET /me", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+
+	mux.HandleFunc("GET /r", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/register.html")
 	})
+	mux.HandleFunc("GET /l", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/login.html")
+	})
+	mux.HandleFunc("GET /checkauth", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/me.html")
+	})
+
+	mux.HandleFunc("GET /all", userHandler.All)
+	mux.HandleFunc("GET /me", middleware.Auth(userHandler.Me, jwtProvider))
 	mux.HandleFunc("GET /exists/{id}", middleware.Auth(userHandler.Exist, jwtProvider))
 	mux.HandleFunc("POST /login", userHandler.Login)
 	mux.HandleFunc("POST /logout", middleware.Auth(userHandler.Logout, jwtProvider))
 	mux.HandleFunc("POST /register", userHandler.Create)
-	mux.HandleFunc("PUT /update", middleware.Auth(userHandler.Update, jwtProvider))
+	mux.HandleFunc("PUT /updatelogin", middleware.Auth(userHandler.UpdateLogin, jwtProvider))
+	mux.HandleFunc("PUT /updatepassword", middleware.Auth(userHandler.UpdatePassword, jwtProvider))
 	mux.HandleFunc("DELETE /{id}", middleware.Auth(userHandler.Delete, jwtProvider))
 
 	httpServer := &http.Server{
@@ -59,7 +69,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	return &App{
 		server: httpServer,
-		db:     nil,
+		db:     db,
 	}, nil
 }
 

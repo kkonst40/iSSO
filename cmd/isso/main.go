@@ -12,6 +12,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Config loading error: %v", err.Error())
 	}
+	log.Println(cfg.JWT.SecretKey)
 
 	application, err := app.New(cfg)
 	if err != nil {

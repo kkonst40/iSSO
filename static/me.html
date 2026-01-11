@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Проверка статуса /me</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background-color: #218838;
+        }
+
+        #statusDisplay {
+            margin-top: 20px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h2>Запрос к localhost:8002/me</h2>
+        <button onclick="checkStatus()">Отправить запрос</button>
+
+        <div id="statusDisplay">
+            Статус: <span id="statusCode">---</span>
+        </div>
+        <p id="statusText" style="color: #666;"></p>
+    </div>
+
+    <script>
+        async function checkStatus() {
+            const codeSpan = document.getElementById('statusCode');
+            const textP = document.getElementById('statusText');
+
+            codeSpan.textContent = 'Ожидание...';
+            codeSpan.className = '';
+            textP.textContent = '';
+
+            try {
+                // Отправляем запрос
+                const response = await fetch('http://localhost:8002/me', {
+                    method: 'GET',
+                    // Ключевой параметр для работы с куками:
+                    credentials: 'include'
+                });
+
+                // Выводим цифровой статус (например, 200, 401, 404)
+                codeSpan.textContent = response.status;
+                textP.textContent = `Результат: ${response.statusText}`;
+
+                // Подсвечиваем результат
+                if (response.ok) {
+                    codeSpan.style.color = '#28a745'; // Зеленый для 200-299
+                } else {
+                    codeSpan.style.color = '#dc3545'; // Красный для ошибок
+                }
+
+            } catch (error) {
+                codeSpan.textContent = 'Ошибка';
+                codeSpan.style.color = '#dc3545';
+                textP.textContent = 'Не удалось связаться с сервером (CORS или сервер выключен)';
+            }
+        }
+    </script>
+
+</body>
+
+</html>

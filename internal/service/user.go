@@ -83,7 +83,40 @@ func (s *UserService) Create(ctx context.Context, login, password string) error 
 	return s.userRepo.Create(ctx, user)
 }
 
-// func (s *UserService) Update(ctx context.Context, ID uuid.UUID, newLogin, new)
+func (s *UserService) UpdateLogin(ctx context.Context, ID uuid.UUID, newLogin string) error {
+	if !isValidLogin(newLogin) {
+		return fmt.Errorf("invalid login")
+	}
+
+	user, err := s.userRepo.GetByID(ctx, ID)
+	if err != nil {
+		return err
+	}
+
+	user.Login = newLogin
+
+	return s.userRepo.Update(ctx, user)
+}
+
+func (s *UserService) UpdatePassword(ctx context.Context, ID uuid.UUID, newPwd string) error {
+	if !isValidPassword(newPwd) {
+		return fmt.Errorf("invalid password")
+	}
+
+	user, err := s.userRepo.GetByID(ctx, ID)
+	if err != nil {
+		return err
+	}
+
+	newPwdHash, err := s.pwdHandler.GeneratePwdHash(newPwd)
+	if err != nil {
+		return fmt.Errorf("generating password hash error")
+	}
+
+	user.PasswordHash = newPwdHash
+
+	return s.userRepo.Update(ctx, user)
+}
 
 func (s *UserService) Delete(ctx context.Context, ID, requesterID uuid.UUID) error {
 	if requesterID != ID && requesterID != s.specialID {
