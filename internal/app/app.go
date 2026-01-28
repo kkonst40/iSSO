@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,17 +25,22 @@ type App struct {
 }
 
 func New(cfg *config.Config) (*App, error) {
-	db, err := NewDB(cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.DBName)
+	db, err := SetupDB(cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.DBName)
 	if err != nil {
 		return nil, err
 	}
 
-	jwtProvider := utils.NewJWTProvider(cfg)
-	pwdHasher := utils.NewPasswordHandler()
+	var (
+		jwtProvider   = utils.NewJWTProvider(cfg)
+		pwdHasher     = utils.NewPasswordHandler()
+		credValidator = utils.NewValidator(cfg)
+	)
 
-	userRepo := repo.New(db)
-	userService := service.New(jwtProvider, pwdHasher, userRepo, uuid.UUID{})
-	userHandler := handler.New(userService, cfg)
+	var (
+		userRepo    = repo.New(db)
+		userService = service.New(jwtProvider, pwdHasher, credValidator, userRepo, uuid.UUID{})
+		userHandler = handler.New(userService, cfg)
+	)
 
 	mux := http.NewServeMux()
 
@@ -74,36 +76,20 @@ func New(cfg *config.Config) (*App, error) {
 }
 
 func (a *App) Run() error {
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	return a.server.ListenAndServe()
+}
 
-	go func() {
-		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			os.Exit(1)
-		}
-	}()
-	log.Println("Server started", "address", a.server.Addr)
-
-	<-quit
-	log.Println("Shutting down server...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
+func (a *App) Shutdown(ctx context.Context) {
 	if err := a.server.Shutdown(ctx); err != nil {
 		log.Println("Server forced to shutdown", "error", err.Error())
 	}
 	if err := a.db.Close(); err != nil {
 		log.Println("DB close error", "error", err.Error())
 	}
-
-	log.Println("Server exiting")
-	return nil
 }
 
-func NewDB(user, pwd, host, dbName string) (*sql.DB, error) {
-	dbUrl := fmt.Sprintf("postgres://%v:%v@%v/%v",
-		user, pwd, host, dbName)
+func SetupDB(user, pwd, host, dbName string) (*sql.DB, error) {
+	dbUrl := fmt.Sprintf("postgres://%s:%s@%s/%s", user, pwd, host, dbName)
 
 	db, err := sql.Open("pgx", dbUrl)
 	if err != nil {
