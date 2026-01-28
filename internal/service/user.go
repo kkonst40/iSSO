@@ -2,32 +2,37 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/kkonst40/isso/internal/apperror"
 	"github.com/kkonst40/isso/internal/model"
 	"github.com/kkonst40/isso/internal/repo"
 	"github.com/kkonst40/isso/internal/utils"
 )
 
 type UserService struct {
-	jwtProvider *utils.JWTProvider
-	pwdHandler  *utils.PasswordHandler
-	userRepo    *repo.UserRepo
-	specialID   uuid.UUID
+	jwtProvider   *utils.JWTProvider
+	pwdHandler    *utils.PasswordHandler
+	credValidator *utils.CredValidator
+	userRepo      *repo.UserRepo
+	specialID     uuid.UUID
 }
 
 func New(
 	jwtProvider *utils.JWTProvider,
 	pwdHandler *utils.PasswordHandler,
+	credValidator *utils.CredValidator,
 	userRepo *repo.UserRepo,
 	specialID uuid.UUID,
 ) *UserService {
 	return &UserService{
-		jwtProvider: jwtProvider,
-		pwdHandler:  pwdHandler,
-		userRepo:    userRepo,
-		specialID:   specialID,
+		jwtProvider:   jwtProvider,
+		pwdHandler:    pwdHandler,
+		credValidator: credValidator,
+		userRepo:      userRepo,
+		specialID:     specialID,
 	}
 }
 
@@ -45,31 +50,34 @@ func (s *UserService) Exist(ctx context.Context, IDs []uuid.UUID) ([]uuid.UUID, 
 func (s *UserService) Login(ctx context.Context, login, password string) (string, error) {
 	user, err := s.userRepo.GetByLogin(ctx, login)
 	if err != nil {
+		if !errors.Is(err, apperror.ErrInternalDB) {
+			return "", apperror.ErrInvalidCredentials
+		}
 		return "", err
 	}
 
 	if !s.pwdHandler.VerifyPwd(password, user.PasswordHash) {
-		return "", fmt.Errorf("invalid password")
+		return "", apperror.ErrInvalidCredentials
 	}
 
 	return s.jwtProvider.Generate(user)
 }
 
 func (s *UserService) Create(ctx context.Context, login, password string) error {
-	if !isValidLogin(login) {
-		return fmt.Errorf("invalid login")
+	if !s.credValidator.ValidateLogin(login) {
+		return apperror.ErrInvalidLogin
 	}
-	if !isValidPassword(password) {
-		return fmt.Errorf("invalid password")
+	if !s.credValidator.ValidatePwd(password) {
+		return apperror.ErrInvalidPwd
 	}
 
 	userID, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generating user id error")
+		return fmt.Errorf("%w: user id", apperror.ErrGeneratingError)
 	}
 	pwdHash, err := s.pwdHandler.GeneratePwdHash(password)
 	if err != nil {
-		return fmt.Errorf("generating password hash error")
+		return fmt.Errorf("%w: password hash", apperror.ErrGeneratingError)
 	}
 
 	user := &model.User{
@@ -83,8 +91,8 @@ func (s *UserService) Create(ctx context.Context, login, password string) error 
 }
 
 func (s *UserService) UpdateLogin(ctx context.Context, ID uuid.UUID, newLogin string) error {
-	if !isValidLogin(newLogin) {
-		return fmt.Errorf("invalid login")
+	if !s.credValidator.ValidateLogin(newLogin) {
+		return apperror.ErrInvalidLogin
 	}
 
 	user, err := s.userRepo.GetByID(ctx, ID)
@@ -98,8 +106,8 @@ func (s *UserService) UpdateLogin(ctx context.Context, ID uuid.UUID, newLogin st
 }
 
 func (s *UserService) UpdatePassword(ctx context.Context, ID uuid.UUID, newPwd string) error {
-	if !isValidPassword(newPwd) {
-		return fmt.Errorf("invalid password")
+	if !s.credValidator.ValidatePwd(newPwd) {
+		return apperror.ErrInvalidPwd
 	}
 
 	user, err := s.userRepo.GetByID(ctx, ID)
@@ -109,7 +117,7 @@ func (s *UserService) UpdatePassword(ctx context.Context, ID uuid.UUID, newPwd s
 
 	newPwdHash, err := s.pwdHandler.GeneratePwdHash(newPwd)
 	if err != nil {
-		return fmt.Errorf("generating password hash error")
+		return fmt.Errorf("%w: password hash", apperror.ErrGeneratingError)
 	}
 
 	user.PasswordHash = newPwdHash
@@ -119,7 +127,7 @@ func (s *UserService) UpdatePassword(ctx context.Context, ID uuid.UUID, newPwd s
 
 func (s *UserService) Delete(ctx context.Context, ID, requesterID uuid.UUID) error {
 	if requesterID != ID && requesterID != s.specialID {
-		return fmt.Errorf("no permission")
+		return apperror.ErrNoPermission
 	}
 
 	return s.userRepo.Delete(ctx, ID)
@@ -133,33 +141,4 @@ func (s *UserService) Logout(ctx context.Context, ID uuid.UUID) error {
 
 	user.TokenID = uuid.New()
 	return s.userRepo.Update(ctx, user)
-}
-
-func isValidLogin(s string) bool {
-	if s == "" {
-		return false
-	}
-
-	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' ||
-			r >= 'A' && r <= 'Z' ||
-			r >= '0' && r <= '9' ||
-			r == '_') {
-			return false
-		}
-	}
-	return true
-}
-
-func isValidPassword(s string) bool {
-	if len(s) < 8 || len(s) > 64 {
-		return false
-	}
-
-	for _, r := range s {
-		if r < 33 || r > 126 {
-			return false
-		}
-	}
-	return true
 }

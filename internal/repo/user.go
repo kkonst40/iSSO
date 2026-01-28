@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/kkonst40/isso/internal/apperror"
 	"github.com/kkonst40/isso/internal/model"
 )
 
@@ -29,7 +30,7 @@ func (r *UserRepo) GetAll(ctx context.Context) ([]model.User, error) {
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("internal db error")
+		return nil, fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 	defer rows.Close()
 
@@ -42,14 +43,14 @@ func (r *UserRepo) GetAll(ctx context.Context) ([]model.User, error) {
 			&user.PasswordHash,
 			&user.TokenID,
 		); err != nil {
-			return nil, fmt.Errorf("internal db error")
+			return nil, fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 		}
 
 		users = append(users, user)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("internal db error")
+		return nil, fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 
 	return users, nil
@@ -70,10 +71,10 @@ func (r *UserRepo) GetByID(ctx context.Context, ID uuid.UUID) (*model.User, erro
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("user (%v) not found", ID)
+		return nil, fmt.Errorf("%w: ID %s", apperror.ErrUserNotFound, ID)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("internal db error")
+		return nil, fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 
 	return &user, nil
@@ -95,10 +96,10 @@ func (r *UserRepo) GetByLogin(ctx context.Context, login string) (*model.User, e
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("user (%v) not found", login)
+		return nil, fmt.Errorf("%w: login %s", apperror.ErrUserNotFound, login)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("internal db error: %w", err)
+		return nil, fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 
 	return &user, nil
@@ -123,13 +124,13 @@ func (r *UserRepo) Create(ctx context.Context, user *model.User) error {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			// unique violation
-			// error 23505 -> Возвращать 409 Conflict
+			// error 23505 -> 409 Conflict
 			if pgErr.Code == "23505" {
-				return fmt.Errorf("user with login (%s) already exists", user.Login)
+				return fmt.Errorf("%w: login '%s' taken", apperror.ErrLoginTaken, user.Login)
 			}
 		}
 
-		return fmt.Errorf("internal db error: %w", err)
+		return fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 
 	return nil
@@ -151,19 +152,19 @@ func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 		if errors.As(err, &pgErr) {
 			// unique violation
 			if pgErr.Code == "23505" {
-				return fmt.Errorf("cannot update: login (%s) is already taken", user.Login)
+				return fmt.Errorf("%w: login '%s' taken", apperror.ErrLoginTaken, user.Login)
 			}
 		}
-		return fmt.Errorf("internal db error: %w", err)
+		return fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 
 	rowsAffected, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("internal db error")
+		return fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("user (%v) not found", user.ID)
+		return fmt.Errorf("%w: ID %s", apperror.ErrUserNotFound, user.ID)
 	}
 
 	return nil
@@ -176,7 +177,7 @@ func (r *UserRepo) Delete(ctx context.Context, ID uuid.UUID) error {
 	`
 
 	if _, err := r.db.ExecContext(ctx, query, ID); err != nil {
-		return fmt.Errorf("internal db error")
+		return fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 
 	return nil
@@ -191,7 +192,7 @@ func (r *UserRepo) Exist(ctx context.Context, IDs []uuid.UUID) ([]uuid.UUID, err
 
 	rows, err := r.db.QueryContext(ctx, query, IDs)
 	if err != nil {
-		return nil, fmt.Errorf("internal db error")
+		return nil, fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 	defer rows.Close()
 
@@ -199,14 +200,14 @@ func (r *UserRepo) Exist(ctx context.Context, IDs []uuid.UUID) ([]uuid.UUID, err
 	for rows.Next() {
 		var ID uuid.UUID
 		if err := rows.Scan(&ID); err != nil {
-			return nil, fmt.Errorf("internal db error")
+			return nil, fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 		}
 
 		existIDs = append(existIDs, ID)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("internal db error")
+		return nil, fmt.Errorf("%w: %w", apperror.ErrInternalDB, err)
 	}
 
 	return existIDs, nil
