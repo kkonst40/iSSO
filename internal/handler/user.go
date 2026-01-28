@@ -2,11 +2,11 @@ package handler
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kkonst40/isso/internal/apperror"
 	"github.com/kkonst40/isso/internal/config"
 	"github.com/kkonst40/isso/internal/dto"
 	"github.com/kkonst40/isso/internal/middleware"
@@ -62,7 +62,8 @@ func (h *UserHandler) Exist(w http.ResponseWriter, r *http.Request) {
 
 	existingIDs, err := h.userService.Exist(r.Context(), inputIDs)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		errMsg, errCode := apperror.GetMsgCode(err)
+		http.Error(w, errMsg, errCode)
 		return
 	}
 
@@ -86,8 +87,8 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.userService.Login(r.Context(), req.Login, req.Password)
 	if err != nil {
-		log.Println(err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errMsg, errCode := apperror.GetMsgCode(err)
+		http.Error(w, errMsg, errCode)
 		return
 	}
 
@@ -96,7 +97,7 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false, // false ТОЛЬКО для localhost без https
+		Secure:   false, // false только для localhost без https
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(60 * 24 * time.Hour),
 	})
@@ -108,12 +109,13 @@ func (h *UserHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	requesterID := r.Context().Value(middleware.RequesterIDKey).(uuid.UUID)
 	err := h.userService.Logout(r.Context(), requesterID)
 	if err != nil {
-		http.Error(w, "Error logging out", http.StatusInternalServerError)
+		//
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:  "pechenye",
-		Value: "",
+		Name:   "pechenye",
+		Value:  "",
+		MaxAge: -1,
 	})
 
 	w.WriteHeader(http.StatusNoContent)
@@ -129,7 +131,8 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	err = h.userService.Create(r.Context(), req.Login, req.Password)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errMsg, errCode := apperror.GetMsgCode(err)
+		http.Error(w, errMsg, errCode)
 		return
 	}
 
@@ -148,8 +151,8 @@ func (h *UserHandler) UpdateLogin(w http.ResponseWriter, r *http.Request) {
 
 	err = h.userService.UpdateLogin(r.Context(), requesterID, req.Login)
 	if err != nil {
-		//
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errMsg, errCode := apperror.GetMsgCode(err)
+		http.Error(w, errMsg, errCode)
 		return
 	}
 
@@ -168,8 +171,8 @@ func (h *UserHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 
 	err = h.userService.UpdatePassword(r.Context(), requesterID, req.Password)
 	if err != nil {
-		//
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errMsg, errCode := apperror.GetMsgCode(err)
+		http.Error(w, errMsg, errCode)
 		return
 	}
 
@@ -181,12 +184,14 @@ func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	ID, err := uuid.Parse(idStr)
 	if err != nil {
-		//
+		http.Error(w, "Invalid request parameter 'id'", http.StatusBadRequest)
 	}
 
 	err = h.userService.Delete(r.Context(), ID, requesterID)
 	if err != nil {
-		//
+		errMsg, errCode := apperror.GetMsgCode(err)
+		http.Error(w, errMsg, errCode)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
