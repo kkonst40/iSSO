@@ -6,5 +6,5 @@ import (
 )
 
 func Timeout(next http.Handler) http.Handler {
-	return http.TimeoutHandler(next, 2*time.Second, "Internal Server Error (Timeout)")
+	return http.TimeoutHandler(next, 3*time.Second, "Internal Server Error (Timeout)")
 }
