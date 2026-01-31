@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "internal/gen/user";
+
+service UserService {
+  rpc Exist (ExistRequest) returns (ExistResponse);
+}
+
+message ExistRequest {
+  repeated string ids = 1; 
+}
+
+message ExistResponse {
+  repeated string existing_ids = 1;
+}
