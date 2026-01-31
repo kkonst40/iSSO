@@ -34,8 +34,8 @@ func main() {
 
 	<-appCtx.Done()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	application.Shutdown(ctx)
+	application.Shutdown(shutdownCtx)
 }

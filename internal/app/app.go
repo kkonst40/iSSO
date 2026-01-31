@@ -5,23 +5,28 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kkonst40/isso/internal/config"
+	pb "github.com/kkonst40/isso/internal/gen/user"
 	"github.com/kkonst40/isso/internal/handler"
 	"github.com/kkonst40/isso/internal/middleware"
 	"github.com/kkonst40/isso/internal/repo"
 	"github.com/kkonst40/isso/internal/service"
 	"github.com/kkonst40/isso/internal/utils"
+	"google.golang.org/grpc"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type App struct {
-	server *http.Server
-	db     *sql.DB
+	httpServer *http.Server
+	grpcServer *grpc.Server
+	grpcPort   string
+	db         *sql.DB
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -65,24 +70,53 @@ func New(cfg *config.Config) (*App, error) {
 	mux.HandleFunc("DELETE /{id}", middleware.Auth(userHandler.Delete, jwtProvider))
 
 	httpServer := &http.Server{
-		Addr:    ":" + cfg.Port,
+		Addr:    ":" + cfg.HttpPort,
 		Handler: mux,
 	}
 
+	grpcServer := grpc.NewServer()
+	userGRPC := handler.NewUserGRPCHandler(userService)
+	pb.RegisterUserServiceServer(grpcServer, userGRPC)
+
 	return &App{
-		server: httpServer,
-		db:     db,
+		httpServer: httpServer,
+		grpcServer: grpcServer,
+		grpcPort:   cfg.GrpcPort,
+		db:         db,
 	}, nil
 }
 
 func (a *App) Run() error {
-	return a.server.ListenAndServe()
+	errChan := make(chan error, 2)
+
+	go func() {
+		if err := a.httpServer.ListenAndServe(); err != nil {
+			errChan <- fmt.Errorf("HTTP serve error: %w", err)
+		}
+	}()
+
+	go func() {
+		grpcListener, err := net.Listen("tcp", ":"+a.grpcPort)
+		if err != nil {
+			errChan <- fmt.Errorf("gRPC listener error: %w", err)
+			return
+		}
+
+		if err := a.grpcServer.Serve(grpcListener); err != nil {
+			errChan <- fmt.Errorf("gRPC serve error: %w", err)
+		}
+	}()
+
+	return <-errChan
 }
 
 func (a *App) Shutdown(ctx context.Context) {
-	if err := a.server.Shutdown(ctx); err != nil {
+	a.grpcServer.GracefulStop()
+
+	if err := a.httpServer.Shutdown(ctx); err != nil {
 		log.Println("Server forced to shutdown", "error", err.Error())
 	}
+
 	if err := a.db.Close(); err != nil {
 		log.Println("DB close error", "error", err.Error())
 	}
