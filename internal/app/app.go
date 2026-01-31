@@ -49,6 +49,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	mux := http.NewServeMux()
 
+	// for test
 	mux.HandleFunc("GET /r", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/register.html")
 	})
@@ -71,7 +72,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	httpServer := &http.Server{
 		Addr:    ":" + cfg.HttpPort,
-		Handler: mux,
+		Handler: middleware.Timeout(mux, 3*time.Second),
 	}
 
 	grpcServer := grpc.NewServer()
