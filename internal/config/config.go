@@ -60,12 +60,9 @@ func Load() (*Config, error) {
 func loadConfigEnv() (*Config, error) {
 	var err error
 	getEnvString := func(key string) string {
-		if err != nil {
-			return ""
-		}
 		val, ok := os.LookupEnv(key)
 		if !ok {
-			err = fmt.Errorf("missing environment variable: %v", key)
+			err = fmt.Errorf("%w\nmissing environment variable: %s", err, key)
 			return ""
 		}
 		return val
@@ -77,13 +74,13 @@ func loadConfigEnv() (*Config, error) {
 		}
 		val, ok := os.LookupEnv(key)
 		if !ok {
-			err = fmt.Errorf("missing environment variable: %v", key)
+			err = fmt.Errorf("%w\nmissing environment variable: %s", err, key)
 			return 0
 		}
 
 		valInt, err := strconv.Atoi(val)
 		if err != nil {
-			err = fmt.Errorf("environment variable is not integer: %v", val)
+			err = fmt.Errorf("%w\nenvironment variable is not integer: %s", err, val)
 			return 0
 		}
 
@@ -115,6 +112,10 @@ func loadConfigEnv() (*Config, error) {
 			MaxPwdLength:   getEnvInt("CRED_MAX_PASSWORD_LENGTH"),
 			MinPwdLength:   getEnvInt("CRED_MIN_PASSWORD_LENGTH"),
 		},
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	return cfg, nil
