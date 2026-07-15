@@ -8,21 +8,28 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kkonst40/sso-service/internal/config"
-	"github.com/segmentio/kafka-go"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 type Producer struct {
-	writer *kafka.Writer
+	client *kgo.Client
 }
 
-func NewProducer(cfg *config.Config) *Producer {
-	return &Producer{
-		writer: &kafka.Writer{
-			Addr:     kafka.TCP(fmt.Sprintf("%s:%s", cfg.Kafka.Host, cfg.Kafka.Port)),
-			Topic:    topicUserEvents,
-			Balancer: &kafka.Hash{},
-		},
+const topicUserEvents = "user-events"
+
+func NewProducer(cfg *config.Config) (*Producer, error) {
+	cl, err := kgo.NewClient(
+		kgo.SeedBrokers(fmt.Sprintf("%s:%s", cfg.Kafka.Host, cfg.Kafka.Port)),
+		kgo.DefaultProduceTopic(topicUserEvents),
+		kgo.AllowAutoTopicCreation(),
+	)
+	if err != nil {
+		return nil, err
 	}
+
+	return &Producer{
+		client: cl,
+	}, nil
 }
 
 func (p *Producer) SendLoginUpdate(ctx context.Context, userID uuid.UUID, login string) error {
@@ -37,10 +44,10 @@ func (p *Producer) SendLoginUpdate(ctx context.Context, userID uuid.UUID, login 
 	key := fmt.Appendf(nil, "user_%v", userID)
 	val, _ := json.Marshal(event)
 
-	return p.writer.WriteMessages(ctx, kafka.Message{
+	return p.client.ProduceSync(ctx, &kgo.Record{
 		Key:   key,
 		Value: val,
-	})
+	}).FirstErr()
 }
 
 func (p *Producer) SendSessionInvalidation(ctx context.Context, sessionID uuid.UUID, ttlDays int) error {
@@ -55,12 +62,12 @@ func (p *Producer) SendSessionInvalidation(ctx context.Context, sessionID uuid.U
 	val, _ := json.Marshal(event)
 	key := fmt.Appendf(nil, "session_%v", sessionID)
 
-	return p.writer.WriteMessages(ctx, kafka.Message{
+	return p.client.ProduceSync(ctx, &kgo.Record{
 		Key:   key,
 		Value: val,
-	})
+	}).FirstErr()
 }
 
-func (p *Producer) Close() error {
-	return p.writer.Close()
+func (p *Producer) Close() {
+	p.client.Close()
 }

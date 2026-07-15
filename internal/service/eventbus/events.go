@@ -7,8 +7,6 @@ import (
 )
 
 const (
-	topicUserEvents = "user-events"
-
 	eventTypeSessionInvalidation = "SESSION_INVALIDATION"
 	eventTypeLoginUpdate         = "LOGIN_UPDATE"
 )

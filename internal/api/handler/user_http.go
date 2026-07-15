@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -10,16 +11,29 @@ import (
 	"github.com/kkonst40/sso-service/internal/api/dto"
 	"github.com/kkonst40/sso-service/internal/config"
 	errs "github.com/kkonst40/sso-service/internal/domain/errors"
+	"github.com/kkonst40/sso-service/internal/domain/model"
 	"github.com/kkonst40/sso-service/internal/service/auth"
-	userservice "github.com/kkonst40/sso-service/internal/service/user"
 )
 
 type UserHandler struct {
-	userService *userservice.Service
+	userService UserService
 	cfg         *config.Config
 }
 
-func New(userService *userservice.Service, cfg *config.Config) *UserHandler {
+type UserService interface {
+	Create(ctx context.Context, login string, password string) error
+	Delete(ctx context.Context, ID uuid.UUID, requesterID uuid.UUID) error
+	Exist(ctx context.Context, IDs []uuid.UUID) ([]uuid.UUID, error)
+	GetIDsByLogins(ctx context.Context, userLogins []string) ([]model.UserInfo, error)
+	GetLoginsByIDs(ctx context.Context, userIDs []uuid.UUID) ([]model.UserInfo, error)
+	Login(ctx context.Context, login string, password string, deviceID uuid.UUID) (string, error)
+	Logout(ctx context.Context, ID uuid.UUID, deviceID uuid.UUID) error
+	LogoutAll(ctx context.Context, ID uuid.UUID) error
+	UpdateLogin(ctx context.Context, ID uuid.UUID, newLogin string) error
+	UpdatePassword(ctx context.Context, ID uuid.UUID, newPwd string) error
+}
+
+func New(userService UserService, cfg *config.Config) *UserHandler {
 	return &UserHandler{
 		userService: userService,
 		cfg:         cfg,
