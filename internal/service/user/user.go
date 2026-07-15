@@ -9,32 +9,61 @@ import (
 	"github.com/google/uuid"
 	errs "github.com/kkonst40/sso-service/internal/domain/errors"
 	"github.com/kkonst40/sso-service/internal/domain/model"
-	sessionrepo "github.com/kkonst40/sso-service/internal/repo/session"
-	userrepo "github.com/kkonst40/sso-service/internal/repo/user"
-	"github.com/kkonst40/sso-service/internal/service/auth"
-	"github.com/kkonst40/sso-service/internal/service/credvalidator"
-	"github.com/kkonst40/sso-service/internal/service/eventbus"
-	"github.com/kkonst40/sso-service/internal/service/pwdhasher"
 )
 
 type Service struct {
-	jwtProvider   *auth.JWTProvider
-	pwdHasher     *pwdhasher.PasswordHasher
-	credValidator *credvalidator.CredValidator
-	eventProducer *eventbus.Producer
-	userRepo      *userrepo.Repo
-	sessionRepo   *sessionrepo.Repo
-	specialID     uuid.UUID
+	jwtProvider   JWTProvider
+	pwdHasher     PasswordHasher
+	credValidator CredValidator
+	eventProducer Producer
+	userRepo      UserRepo
+	sessionRepo   SessionRepo
+}
+
+type UserRepo interface {
+	Create(ctx context.Context, user *model.User) error
+	Delete(ctx context.Context, ID uuid.UUID) error
+	Exist(ctx context.Context, IDs []uuid.UUID) ([]uuid.UUID, error)
+	GetByID(ctx context.Context, ID uuid.UUID) (model.User, error)
+	GetByLogin(ctx context.Context, login string) (model.User, error)
+	GetIDsByLogins(ctx context.Context, logins []string) ([]model.UserInfo, error)
+	GetLoginsByIDs(ctx context.Context, IDs []uuid.UUID) ([]model.UserInfo, error)
+	Update(ctx context.Context, user *model.User) error
+}
+
+type SessionRepo interface {
+	Create(ctx context.Context, session *model.Session) error
+	Delete(ctx context.Context, userID uuid.UUID, deviceID uuid.UUID) (uuid.UUID, error)
+	DeleteAll(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+}
+
+type JWTProvider interface {
+	Generate(user *model.User, session *model.Session) (string, error)
+	GetTTLDays() int
+}
+
+type PasswordHasher interface {
+	VerifyPwd(password string, passwordHash string) bool
+	GeneratePwdHash(password string) (string, error)
+}
+
+type CredValidator interface {
+	ValidateLogin(login string) bool
+	ValidatePwd(pwd string) bool
+}
+
+type Producer interface {
+	SendLoginUpdate(ctx context.Context, userID uuid.UUID, login string) error
+	SendSessionInvalidation(ctx context.Context, sessionID uuid.UUID, ttlDays int) error
 }
 
 func New(
-	jwtProvider *auth.JWTProvider,
-	pwdHasher *pwdhasher.PasswordHasher,
-	credValidator *credvalidator.CredValidator,
-	eventProducer *eventbus.Producer,
-	userRepo *userrepo.Repo,
-	sessionRepo *sessionrepo.Repo,
-	specialID uuid.UUID,
+	jwtProvider JWTProvider,
+	pwdHasher PasswordHasher,
+	credValidator CredValidator,
+	eventProducer Producer,
+	userRepo UserRepo,
+	sessionRepo SessionRepo,
 ) *Service {
 	return &Service{
 		jwtProvider:   jwtProvider,
@@ -43,7 +72,6 @@ func New(
 		eventProducer: eventProducer,
 		userRepo:      userRepo,
 		sessionRepo:   sessionRepo,
-		specialID:     specialID,
 	}
 }
 
@@ -188,7 +216,7 @@ func (s *Service) UpdatePassword(ctx context.Context, ID uuid.UUID, newPwd strin
 }
 
 func (s *Service) Delete(ctx context.Context, ID, requesterID uuid.UUID) error {
-	if requesterID != ID && requesterID != s.specialID {
+	if requesterID != ID {
 		return errs.ErrForbidden
 	}
 

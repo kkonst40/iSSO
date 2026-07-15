@@ -172,7 +172,7 @@ func (r *Repo) Update(ctx context.Context, user *model.User) error {
 		UPDATE users
 		SET 
 			login = $1,
-			password_hash = $2,
+			password_hash = $2
 		WHERE id = $3
 	`
 

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/kkonst40/sso-service/internal/api/handler"
 	"github.com/kkonst40/sso-service/internal/api/middleware"
 	"github.com/kkonst40/sso-service/internal/config"
@@ -39,11 +38,15 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 
+	eventProducer, err := eventbus.NewProducer(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	var (
 		jwtProvider   = auth.NewJWTProvider(cfg)
 		pwdHasher     = pwdhasher.New()
 		credValidator = credvalidator.New(cfg)
-		eventProducer = eventbus.NewProducer(cfg)
 	)
 
 	var (
@@ -56,7 +59,6 @@ func New(cfg *config.Config) (*App, error) {
 			eventProducer,
 			userRepo,
 			sessionRepo,
-			uuid.UUID{},
 		)
 		userHandler = handler.New(userService, cfg)
 	)

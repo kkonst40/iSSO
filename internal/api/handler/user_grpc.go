@@ -5,15 +5,14 @@ import (
 
 	"github.com/google/uuid"
 	pb "github.com/kkonst40/sso-service/internal/gen/user"
-	userservice "github.com/kkonst40/sso-service/internal/service/user"
 )
 
 type UserGRPCHandler struct {
 	pb.UnimplementedUserServiceServer
-	userService *userservice.Service
+	userService UserService
 }
 
-func NewUserGRPCHandler(userService *userservice.Service) *UserGRPCHandler {
+func NewUserGRPCHandler(userService UserService) *UserGRPCHandler {
 	return &UserGRPCHandler{userService: userService}
 }
 
